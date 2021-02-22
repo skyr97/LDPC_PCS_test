@@ -9,10 +9,10 @@ np.set_printoptions(threshold=np.inf)
 np.random.seed(137)
 
 # 该版本支持加5G LDPC, 概率解调, 不支持普通LDPC码, 因为普通LDPC码不需要打孔
-glob_ModOrder = 16
-data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt', header=None, sep='\s+')
-constellation_real = np.reshape(np.array(data[[3]]), glob_ModOrder)
-constellation_image = np.reshape(np.array(data[[5]]), glob_ModOrder)
+# glob_ModOrder = 16
+# data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt', header=None, sep='\s+')
+# constellation_real = np.reshape(np.array(data[[3]]), glob_ModOrder)
+# constellation_image = np.reshape(np.array(data[[5]]), glob_ModOrder)
 # l_dict = sio.loadmat("tmp_prob_cons6.8.mat")
 # constellation_real = l_dict["cons"][:,0].reshape([-1])
 # constellation_image = l_dict["cons"][:,1].reshape([-1])
@@ -20,24 +20,28 @@ constellation_image = np.reshape(np.array(data[[5]]), glob_ModOrder)
 # constellation_real = l_dict["deep_qam16"][:,0].reshape([-1])
 # constellation_image = l_dict["deep_qam16"][:,1].reshape([-1])
 # LDPC码设置
-LDPC_flag = 1                      # 0 --- 不加LDPC码, 1 --- 加LDPC码
-# 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
-glob_ldpc_length = 1104
-glob_trans_ldpc_length = 1056      # 实际信道中传输比特的长度, 5G LDPC码需要打孔前两列
-glob_information_length = 528      # 信息比特长度
-glob_Z = 24                        # QC矩阵中扩展因子Z, 该参数大小决定了打孔比特的长度
+# LDPC_flag = 1                      # 0 --- 不加LDPC码, 1 --- 加LDPC码
+# # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
+# glob_ldpc_length = 1104
+# glob_trans_ldpc_length = 1056      # 实际信道中传输比特的长度, 5G LDPC码需要打孔前两列
+# glob_information_length = 528      # 信息比特长度
+# glob_Z = 24                        # QC矩阵中扩展因子Z, 该参数大小决定了打孔比特的长度
 
-# 保存文件
-NoLDPC_filename = 'ceshi.txt'
-LDPC_filename = 'ceshi_ldpc_gallager.txt'
+# # 保存文件
+# NoLDPC_filename = 'ceshi.txt'
+# LDPC_filename = 'ceshi_ldpc_gallager.txt'
 
 
 class ConstellationPerformanceTotal:
-    def __init__(self):
-        self.ModOrder = glob_ModOrder
-        self.bitsPerSym = int(np.log2(glob_ModOrder))
+    def __init__(self, modOrder, constellation_real, constellation_image, prob):
+        self.ModOrder = modOrder
+        self.bitsPerSym = int(math.log2(self.ModOrder))
         self.Cons_Re = constellation_real
         self.Cons_Im = constellation_image
+        self.prob = prob
+        if not isinstance(prob, np.ndarray):
+            self.prob = np.array(prob)
+        self.prob = self.prob.reshape([-1])
         # LDPC码设置 (设置5G LDPC码的参数)
         # 是否加LDPC码 (0-No!, 1-Yes!)
         self.LDPC_flag = LDPC_flag
@@ -49,10 +53,12 @@ class ConstellationPerformanceTotal:
         self.NoLDPC_filename = NoLDPC_filename
         self.LDPC_filename = LDPC_filename
 
-    def __probability_shaping__(self,prob):
+    def _probability_shaping(self):
         """记录解调时, 每个星座点的概率值; 如果不需要PS的话, 则每个点的概率设置为1"""
+        if np.sum(self.prob != 1):
+            self.prob = self.prob/np.sum(self.prob)
         # self.ps_value = np.ones(self.ModOrder, dtype=float)
-        self.ps_value = prob
+        # self.ps_value = prob
         # # 融合2个点
         # fuse_2points = [0, 12, 8, 10, 4, 5, 24, 26, 16, 28, 20, 21, 52, 53, 48, 60, 56, 58, 40, 42, 32, 44, 36, 37]
         # # # 融合3个点
@@ -68,7 +74,7 @@ class ConstellationPerformanceTotal:
         #     if i in fuse_points:
         #         self.ps_value[i] = 0.5
 
-    def __record_index__(self):
+    def _record_index(self):
         """记录星座点中每个比特为0和1时对应的符号"""
         self.list_zero = []                         # 记录比特为0的星座点的索引, 维度为[bitsPerSym, ModOrder / 2]
         # 记录比特为1的星座点的索引, 维度为[bitsPerSym, ModOrder / 2]
@@ -100,11 +106,11 @@ class ConstellationPerformanceTotal:
         """星座归一化"""
         power = 0.0
         for i in range(self.ModOrder):
-            power += self.Cons_Re[i] ** 2 + self.Cons_Im[i] ** 2
-        print("Suppose Average Power is: " + str(self.ModOrder))
+            power += (self.Cons_Re[i] ** 2 + self.Cons_Im[i] ** 2)*self.prob[i]
+        print("Suppose Average Power is: " + "1")
         print("Actual Power is: " + str(power))
-        self.Cons_Re = self.Cons_Re / np.sqrt(power / self.ModOrder)
-        self.Cons_Im = self.Cons_Im / np.sqrt(power / self.ModOrder)
+        self.Cons_Re = self.Cons_Re / np.sqrt(power)
+        self.Cons_Im = self.Cons_Im / np.sqrt(power)
 
     def mod(self, msg):
         """取模值, 将用户传输的比特转换为(0 ~ ModOrder - 1)之间的值"""
@@ -140,10 +146,10 @@ class ConstellationPerformanceTotal:
             bit1_add = 0
             for j in range(int(self.ModOrder / 2)):
                 temp_index_bit0 = self.list_zero[i, j]
-                bit0_add += self.ps_value[temp_index_bit0] * 1.0 / np.pi / var * np.exp(-1 * (math.pow(
+                bit0_add += self.prob[temp_index_bit0] * 1.0 / np.pi / var * np.exp(-1 * (math.pow(
                     rx_spread[0][0] - self.Cons_Re[temp_index_bit0], 2) + math.pow(rx_spread[0][1] - self.Cons_Im[temp_index_bit0], 2)) / var)
                 temp_index_bit1 = self.list_one[i, j]
-                bit1_add += self.ps_value[temp_index_bit1] * 1.0 / np.pi / var * np.exp(-1 * (math.pow(
+                bit1_add += self.prob[temp_index_bit1] * 1.0 / np.pi / var * np.exp(-1 * (math.pow(
                     rx_spread[0][0] - self.Cons_Re[temp_index_bit1], 2) + math.pow(rx_spread[0][1] - self.Cons_Im[temp_index_bit1], 2)) / var)
 
             # 为了防止出现除0操作
@@ -184,8 +190,8 @@ class ConstellationPerformanceTotal:
 
     def test_no_ldpc(self):
         """该函数是测试不加LDPC码的系统性能"""
-        self.__record_index__()
-        self.__probability_shaping__()
+        self._record_index()
+        self._probability_shaping()
         self.constellation_norm()
         for EbN0 in range(0, 11):
             total_symbol = 0
@@ -225,21 +231,21 @@ class ConstellationPerformanceTotal:
             f1.write("\n")
             f1.close()
 
-    def msg_bit_gen(self,prob):
-        prob=prob/np.sum(prob)
-        src = np.random.choice(np.arange(glob_ModOrder),p=prob,size=self.information_Len//self.bitsPerSym)
-        msg_bit = np.zeros(shape=[len(src),self.bitsPerSym])
-        for i in range(self.bitsPerSym-1,-1,-1):
-            msg_bit[:,i]=src%2
-            src//=2
-        msg_bit = msg_bit.reshape([1,-1])
+    def msg_bit_gen(self, prob):
+        prob = prob/np.sum(prob)
+        src = np.random.choice(
+            np.arange(self.ModOrder), p=prob, size=self.information_Len//self.bitsPerSym)
+        msg_bit = np.zeros(shape=[len(src), self.bitsPerSym])
+        for i in range(self.bitsPerSym-1, -1, -1):
+            msg_bit[:, i] = src % 2
+            src //= 2
+        msg_bit = msg_bit.reshape([1, -1])
         return msg_bit
 
-
-    def test_ldpc(self,prob):
+    def test_ldpc(self):
         """该函数是测试加LDPC码的系统性能"""
-        self.__record_index__()
-        self.__probability_shaping__(prob)
+        self._record_index()
+        self._probability_shaping()
         self.constellation_norm()
         save_count = int(self.Trans_LDPC_Len / self.bitsPerSym)    # 保存需要传输多少次
         generated_matrix = construct_generate_matrix()             # 获得生成矩阵
@@ -312,28 +318,45 @@ class ConstellationPerformanceTotal:
             f1.write("\n")
             f1.close()
 
-    def evaluate(self,prob):
+    def evaluate(self):
         if self.LDPC_flag == 1:
-            self.test_ldpc(prob)
+            self.test_ldpc()
         else:
             self.test_no_ldpc()
 
 
 if __name__ == '__main__':
-    Conventional_test = ConstellationPerformanceTotal()
-    prob = np.ones(shape=[glob_ModOrder])/glob_ModOrder
-    # prob = sio.loadmat("tmp_prob_cons6.8.mat")['prob'].reshape([-1])
-    
-    plt.scatter(constellation_real,constellation_image)
-    sn = list(range(glob_ModOrder))
-    for i in range(glob_ModOrder):
-        marker=""
-        sym=i
-        for _ in range(int(math.log2(glob_ModOrder))):
-            marker = str(sym%2)+marker
-            sym//=2
-        marker="$"+marker+"$"
+    modOrder = 16
+    data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt', header=None, sep='\s+')
+    constellation_real = np.reshape(np.array(data[[3]]), modOrder)
+    constellation_image = np.reshape(np.array(data[[5]]), modOrder)
+    LDPC_flag = 1                      # 0 --- 不加LDPC码, 1 --- 加LDPC码
+    # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
+    glob_ldpc_length = 1104
+    glob_trans_ldpc_length = 1056      # 实际信道中传输比特的长度, 5G LDPC码需要打孔前两列
+    glob_information_length = 528      # 信息比特长度
+    glob_Z = 24                        # QC矩阵中扩展因子Z, 该参数大小决定了打孔比特的长度
 
-        plt.scatter(constellation_real[i],constellation_image[i],s=400,marker=marker,c='r')
+    # 保存文件
+    NoLDPC_filename = 'ceshi.txt'
+    LDPC_filename = 'ceshi_ldpc_gallager.txt'
+    prob = np.ones(shape=[modOrder])/modOrder
+    Conventional_test = ConstellationPerformanceTotal(
+        modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image,prob=prob)
+    
+    # prob = sio.loadmat("tmp_prob_cons6.8.mat")['prob'].reshape([-1])
+
+    plt.scatter(constellation_real, constellation_image)
+    sn = list(range(modOrder))
+    for i in range(modOrder):
+        marker = ""
+        sym = i
+        for _ in range(int(math.log2(modOrder))):
+            marker = str(sym % 2)+marker
+            sym //= 2
+        marker = "$"+marker+"$"
+
+        plt.scatter(
+            constellation_real[i], constellation_image[i], s=400, marker=marker, c='r')
     plt.show()
-    Conventional_test.evaluate(prob=prob)
+    Conventional_test.evaluate()
