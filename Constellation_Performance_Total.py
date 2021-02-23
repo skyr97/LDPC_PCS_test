@@ -34,22 +34,26 @@ np.random.seed(137)
 
 
 class ConstellationPerformanceTotal:
-    def __init__(self, modOrder, constellation_real, constellation_image, prob):
+    def __init__(self, modOrder, constellation_real, constellation_image, prob, ldpc_length, trans_ldpc_length, information_length, QC_Z):
         self.ModOrder = modOrder
         self.bitsPerSym = int(math.log2(self.ModOrder))
         self.Cons_Re = constellation_real
         self.Cons_Im = constellation_image
         self.prob = prob
+        self.prob_quadra = self.prob[0:len(self.prob)//4]
         if not isinstance(prob, np.ndarray):
             self.prob = np.array(prob)
         self.prob = self.prob.reshape([-1])
+        self.ldpc_length=ldpc_length
+        
         # LDPC码设置 (设置5G LDPC码的参数)
         # 是否加LDPC码 (0-No!, 1-Yes!)
         self.LDPC_flag = LDPC_flag
         self.LDPC_Len = glob_ldpc_length                                     # 码长
-        self.Trans_LDPC_Len = glob_trans_ldpc_length                         # 实际传输比特
-        self.information_Len = glob_information_length                       # 信息比特长度
-        self.LDPC_code_rate = self.information_Len / self.Trans_LDPC_Len     # 码率
+        self.trans_ldpc_length = trans_ldpc_length                         # 实际传输比特
+        self.information_Len = information_length                       # 信息比特长度
+        # self.LDPC_code_rate = self.information_Len / self.trans_ldpc_length     # 码率
+        self.ldpc_code_rate = fractions.Fraction(self.information_Len, self.trans_ldpc_length)
         # 保存文件名
         self.NoLDPC_filename = NoLDPC_filename
         self.LDPC_filename = LDPC_filename
@@ -58,6 +62,7 @@ class ConstellationPerformanceTotal:
         """记录解调时, 每个星座点的概率值; 如果不需要PS的话, 则每个点的概率设置为1"""
         if np.sum(self.prob != 1):
             self.prob = self.prob/np.sum(self.prob)
+        self.prob_quadra = self.prob_quadra/np.sum(self.prob_quadra)
         # self.ps_value = np.ones(self.ModOrder, dtype=float)
         # self.ps_value = prob
         # # 融合2个点
@@ -232,12 +237,13 @@ class ConstellationPerformanceTotal:
             f1.write("\n")
             f1.close()
 
-    def msg_bit_gen(self, prob):
-        prob = prob/np.sum(prob)
+    def msg_bit_gen(self):
+        info_bits_per_sym=self.bitsPerSym-2
+        info_order=self.ModOrder//4
         src = np.random.choice(
-            np.arange(self.ModOrder), p=prob, size=self.information_Len//self.bitsPerSym)
-        msg_bit = np.zeros(shape=[len(src), self.bitsPerSym])
-        for i in range(self.bitsPerSym-1, -1, -1):
+            np.arange(info_order), p=self.prob_quadra, size=self.information_Len//info_bits_per_sym)
+        msg_bit = np.zeros(shape=[len(src), info_bits_per_sym])
+        for i in range(info_bits_per_sym-1, -1, -1):
             msg_bit[:, i] = src % 2
             src //= 2
         msg_bit = msg_bit.reshape([1, -1])
@@ -248,10 +254,10 @@ class ConstellationPerformanceTotal:
         self._record_index()
         self._probability_shaping()
         self.constellation_norm()
-        save_count = self.Trans_LDPC_Len // self.bitsPerSym    # 保存需要传输多少次
+        save_count = self.trans_ldpc_length // self.bitsPerSym    # 保存需要传输多少次
         generated_matrix = construct_generate_matrix()             # 获得生成矩阵
-        esn0 = [6.8, 11.8]
-        code_rate=fractions.Fraction(glob_information_length,glob_trans_ldpc_length)
+        esn0 = [10, 11.8]
+        
         for snr in esn0:
             total_frame = 0
             error_frame = 0
@@ -261,13 +267,14 @@ class ConstellationPerformanceTotal:
             while flag:
                 total_frame += 1
                 noise_sigma = np.sqrt(0.5 / math.pow(10, snr / 10))
-                msg_bit = self.msg_bit_gen(prob)  # 按概率产生符号，再转换成信息比特
+                msg_bit = self.msg_bit_gen()  # 按概率产生符号，再转换成信息比特
                 # msg_bit = np.random.randint(
                 #     0, 2, (1, self.information_Len))    # 产生信息比特流
                 trans_bit = get_ldpc_code(
                     msg_bit, generated_matrix)            # 产生LDPC码
                 actual_trans_bit = trans_bit[:, :-2 * glob_Z]
-                # rearray_trans_bit = self.ldpc_pcs_rearray_encode(actual_trans_bit,code_rate)
+                actual_trans_bit = self.ldpc_pcs_rearray_encode(actual_trans_bit)
+                # rearray_trans_bit_decode = self.ldpc_pcs_rearray_decode(rearray_trans_bit)
                 rec_dims = np.zeros((save_count, self.bitsPerSym), dtype=float)
                 for i in range(save_count):
                     temp_actual_trans_bit = actual_trans_bit[:,
@@ -278,8 +285,8 @@ class ConstellationPerformanceTotal:
 
                 # 得到解调器的输出
                 total_rec_bit_llr = np.squeeze(np.reshape(
-                    rec_dims, (-1, self.Trans_LDPC_Len)))  # 降维, 变成一维
-
+                    rec_dims, (-1, self.trans_ldpc_length)))  # 降维, 变成一维
+                total_rec_bit_llr = self.ldpc_pcs_rearray_decode(total_rec_bit_llr)
                 # 补上打孔的
                 ldpc_in_llr = np.zeros(self.LDPC_Len, dtype=float)
                 ldpc_in_llr[:-2 * glob_Z] = total_rec_bit_llr
@@ -327,42 +334,62 @@ class ConstellationPerformanceTotal:
         else:
             self.test_no_ldpc()
 
-    def ldpc_pcs_rearray_encode(self, code_bits: np.ndarray, code_rate: fractions.Fraction):
+    def ldpc_pcs_rearray_encode(self, code_bits: np.ndarray):
         """
         在PCS中, 仅设计单个象限内的星座位置与概率, 由高位的2bit冗余位决定符号位于哪个象限, 低位的信息bit决定符号在象限中的位置
         经过系统LDPC编码后, 编码序列code_bits前N位是信息位.
         该函数将冗余位中每2bits与信息位中每个符号配对, 重排编码序列code_bits
         """
-
         rate_dic = {16: fractions.Fraction(2, 4), 64: fractions.Fraction(
             4, 6), 256: fractions.Fraction(6, 8)}
-        if code_rate != rate_dic[self.ModOrder]:
+        if self.ldpc_code_rate != rate_dic[self.ModOrder]:
             raise ValueError(
                 "the LDPC code rate must be {numerator}/{denom} if the modulation order is {modOrder},\
                      but {numerator2}/{denom2} is given".format(numerator=rate_dic[self.ModOrder].numerator,
-                                                                denom=rate_dic[self.ModOrder].denominator, modOrder=self.ModOrder, numerator2=code_rate.numerator, denom2=code_rate.denominator))
+                                                                denom=rate_dic[self.ModOrder].denominator, 
+                                                                modOrder=self.ModOrder, numerator2=self.ldpc_code_rate.numerator, 
+                                                                denom2=self.ldpc_code_rate.denominator))
         shape = code_bits.shape
         code_bits = code_bits.reshape([-1])
         code_len = len(code_bits)
-        msg_len = int(code_len*code_rate)
-        res = np.zeros(shape=[code_len])
+        msg_len = int(code_len*self.ldpc_code_rate)
+        res = np.zeros(shape=[code_len],dtype=code_bits.dtype)
         sign_step = 2
-        msg_step = code_rate.numerator*2
-        i,j,k=0,msg_len,0
-        while j<code_len:
-            res[k:k+sign_step]=code_bits[j:j+sign_step]
-            res[k+sign_step:k+sign_step+msg_step]=code_bits[i:i+msg_step]
-            k=k+msg_step+sign_step
-            j+=sign_step
-            i+=msg_step
-        res=res.reshape(shape)
+        msg_step = self.ldpc_code_rate.numerator*2
+        i, j, k = 0, msg_len, 0
+        while j < code_len:
+            res[k:k+sign_step] = code_bits[j:j+sign_step]
+            res[k+sign_step:k+sign_step+msg_step] = code_bits[i:i+msg_step]
+            k = k+msg_step+sign_step
+            j += sign_step
+            i += msg_step
+        res = res.reshape(shape)
         return res
 
     def ldpc_pcs_rearray_decode(self, rec_bits: np.ndarray):
         """
         该函数是函数ldpc_pcs_rearray_encode的逆操作
         """
-        pass
+        size=rec_bits.shape
+        rec_bits=rec_bits.reshape([-1])
+        code_len=len(rec_bits)
+        msg_len=int(code_len*self.ldpc_code_rate)
+        msg_step=self.ldpc_code_rate.numerator*2
+        sign_step=2
+        res=np.zeros(shape=[code_len],dtype=rec_bits.dtype)
+        res:np.ndarray
+        i,j,sign_ptr,msg_ptr=0,msg_len,0,sign_step
+        while j<code_len:
+            res[i:i+msg_step]=rec_bits[msg_ptr:msg_ptr+msg_step]
+            msg_ptr=msg_ptr+msg_step+sign_step
+            i+=msg_step
+            res[j:j+sign_step]=rec_bits[sign_ptr:sign_ptr+sign_step]
+            sign_ptr=sign_ptr+msg_step+sign_step
+            j+=sign_step
+        res=res.reshape(size)
+        return res
+        
+
 
 
 if __name__ == '__main__':
@@ -383,8 +410,9 @@ if __name__ == '__main__':
     prob = np.ones(shape=[modOrder])/modOrder
     # prob = sio.loadmat("tmp_prob_cons6.8.mat")['prob'].reshape([-1])
     Conventional_test = ConstellationPerformanceTotal(
-        modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob)
-
+        modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
+        ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
+        QC_Z=glob_Z)
 
     # plt.scatter(constellation_real, constellation_image)
     # sn = list(range(modOrder))
