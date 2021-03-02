@@ -1,3 +1,4 @@
+# -*- coding:utf-8 -*-
 import numpy as np
 import math
 import matplotlib.pyplot as plt
@@ -8,6 +9,7 @@ import fractions
 import os
 from Gaussian_elimination import get_ldpc_code, construct_generate_matrix
 from Conventional_NMS import decode_algorithm_NMS
+from collections.abc import Iterable
 np.set_printoptions(threshold=np.inf)
 np.random.seed(137)
 
@@ -36,7 +38,7 @@ np.random.seed(137)
 
 
 class ConstellationPerformanceTotal:
-    def __init__(self, modOrder, constellation_real, constellation_image, prob, ldpc_length, trans_ldpc_length, information_length, QC_Z,snr_list:list):
+    def __init__(self, modOrder, constellation_real, constellation_image, prob, ldpc_length, trans_ldpc_length, information_length, QC_Z, snr_list):
         self.ModOrder = modOrder
         self.bitsPerSym = int(math.log2(self.ModOrder))
         self.Cons_Re = constellation_real
@@ -47,7 +49,11 @@ class ConstellationPerformanceTotal:
             self.prob = np.array(prob)
         self.prob = self.prob.reshape([-1])
         self.ldpc_length = ldpc_length
-        self.snr_list=snr_list
+        if isinstance(snr_list, Iterable):
+            self.snr_list = list(snr_list)
+        else:
+            self.snr_list = [snr_list]
+
         # LDPC码设置 (设置5G LDPC码的参数)
         # 是否加LDPC码 (0-No!, 1-Yes!)
         self.LDPC_flag = LDPC_flag
@@ -57,14 +63,14 @@ class ConstellationPerformanceTotal:
         # self.LDPC_code_rate = self.information_Len / self.trans_ldpc_length     # 码率
         self.ldpc_code_rate = fractions.Fraction(
             self.information_Len, self.trans_ldpc_length)
+        self.ldpc_code_rate: fractions.Fraction
         # 保存文件名
         self.NoLDPC_filename = NoLDPC_filename
         self.LDPC_filename = LDPC_filename
 
     def _probability_shaping(self):
-        """记录解调时, 每个星座点的概率值; 如果不需要PS的话, 则每个点的概率设置为1"""
-        if np.sum(self.prob != 1):
-            self.prob = self.prob/np.sum(self.prob)
+
+        self.prob = self.prob/np.sum(self.prob)
         self.prob_quadra = self.prob_quadra/np.sum(self.prob_quadra)
         # self.ps_value = np.ones(self.ModOrder, dtype=float)
         # self.ps_value = prob
@@ -110,6 +116,15 @@ class ConstellationPerformanceTotal:
 
         self.list_zero = np.array(self.list_zero, dtype=int)
         self.list_one = np.array(self.list_one, dtype=int)
+
+    def calcu_ebn0(self, esn0: float):
+        eq_prob = np.ones(self.ModOrder)
+        eq_prob = eq_prob/np.sum(eq_prob)
+        H1 = -np.sum(eq_prob*np.log(eq_prob))
+        H2 = -np.sum(self.prob*np.log(self.prob))
+        R2 = H2/H1
+        ebn0 = esn0-10*math.log10(self.bitsPerSym*self.ldpc_code_rate*R2)
+        return ebn0
 
     def constellation_norm(self):
         """星座归一化"""
@@ -259,8 +274,6 @@ class ConstellationPerformanceTotal:
         self.constellation_norm()
         save_count = self.trans_ldpc_length // self.bitsPerSym    # 保存需要传输多少次
         generated_matrix = construct_generate_matrix()             # 获得生成矩阵
-
-
         for snr in self.snr_list:
             total_frame = 0
             error_frame = 0
@@ -324,12 +337,14 @@ class ConstellationPerformanceTotal:
 
             fer = error_frame / total_frame
             ber = error_bit / (total_frame * self.information_Len)
+            ebn0 = self.calcu_ebn0(snr)
             print("fer = " + str(fer) + ", ber = " + str(ber))
             print("\n")
             f1 = open(self.LDPC_filename, 'a')
             f1.write("\n")
-            f1.write("EsN0 = " + str(snr) + ", FER = " +
-                     str(fer) + ", BER = " + str(ber))
+            # f1.write("EsN0 = " + str(snr) + ", FER = " +
+            #          str(fer) + ", BER = " + str(ber))
+            f1.write("EsN0 = {esn0}, EbN0 = {ebn0}, FER = {fer}, BER = {ber}".format(esn0=snr,ebn0=ebn0,fer=fer,ber=ber))
             f1.write("\n")
             f1.close()
 
@@ -397,15 +412,15 @@ class ConstellationPerformanceTotal:
 
 if __name__ == '__main__':
     modOrder = 16
-    snr = 4.00+0.4*5
+    snr = float(input("snr:"))
 
     data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt', header=None, sep='\s+')
     constellation_real = np.reshape(np.array(data[[3]]), modOrder)
     constellation_image = np.reshape(np.array(data[[5]]), modOrder)
-    prob = np.ones(shape=modOrder,dtype=np.float32)/modOrder
+    prob = np.ones(shape=modOrder, dtype=np.float32)/modOrder
 
     # matpath = "./images/modOrder16/"
-    # 
+    
     # order = 16
     # filename = "snr{snr:.2f}_order{M}.mat".format(snr=snr, M=order)
     # cons_l_dict = loadmat(os.path.join(matpath, filename))
@@ -414,7 +429,6 @@ if __name__ == '__main__':
     # prob = cons_l_dict["prob"].reshape([-1])
     # constellation_real = cons[:, 0].reshape([-1])
     # constellation_image = cons[:, 1].reshape([-1])
-
 
     LDPC_flag = 1                      # 0 --- 不加LDPC码, 1 --- 加LDPC码
     # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
@@ -431,7 +445,7 @@ if __name__ == '__main__':
     Conventional_test = ConstellationPerformanceTotal(
         modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
         ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
-        QC_Z=glob_Z,snr_list=[snr])
+        QC_Z=glob_Z, snr_list=snr)
 
     # plt.scatter(constellation_real, constellation_image)
     # sn = list(range(modOrder))
