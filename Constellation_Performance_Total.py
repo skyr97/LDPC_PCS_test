@@ -414,21 +414,21 @@ if __name__ == '__main__':
     modOrder = 16
     snr = float(input("snr:"))
 
-    data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt', header=None, sep='\s+')
-    constellation_real = np.reshape(np.array(data[[3]]), modOrder)
-    constellation_image = np.reshape(np.array(data[[5]]), modOrder)
-    prob = np.ones(shape=modOrder, dtype=np.float32)/modOrder
+    # data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt', header=None, sep='\s+')
+    # constellation_real = np.reshape(np.array(data[[3]]), modOrder)
+    # constellation_image = np.reshape(np.array(data[[5]]), modOrder)
+    # prob = np.ones(shape=modOrder, dtype=np.float32)/modOrder
 
-    # matpath = "./images/modOrder16/"
+    matpath = "./images/modOrder16/"
     
-    # order = 16
-    # filename = "snr{snr:.2f}_order{M}.mat".format(snr=snr, M=order)
-    # cons_l_dict = loadmat(os.path.join(matpath, filename))
+    order = 16
+    filename = "snr{snr:.2f}_order{M}.mat".format(snr=snr, M=order)
+    cons_l_dict = loadmat(os.path.join(matpath, filename))
 
-    # cons = cons_l_dict["cons"]
-    # prob = cons_l_dict["prob"].reshape([-1])
-    # constellation_real = cons[:, 0].reshape([-1])
-    # constellation_image = cons[:, 1].reshape([-1])
+    cons = cons_l_dict["cons"]
+    prob = cons_l_dict["prob"].reshape([-1])
+    constellation_real = cons[:, 0].reshape([-1])
+    constellation_image = cons[:, 1].reshape([-1])
 
     LDPC_flag = 1                      # 0 --- 不加LDPC码, 1 --- 加LDPC码
     # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
