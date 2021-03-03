@@ -3,13 +3,15 @@ import numpy as np
 import math
 import matplotlib.pyplot as plt
 import pandas as pd
-import scipy.io as sio
+# import scipy.io as sio
 from scipy.io import loadmat
 import fractions
 import os
 from Gaussian_elimination import get_ldpc_code, construct_generate_matrix
 from Conventional_NMS import decode_algorithm_NMS
 from collections.abc import Iterable
+from datetime import datetime
+import comm_operation as comm
 np.set_printoptions(threshold=np.inf)
 np.random.seed(137)
 
@@ -38,7 +40,7 @@ np.random.seed(137)
 
 
 class ConstellationPerformanceTotal:
-    def __init__(self, modOrder, constellation_real, constellation_image, prob, ldpc_length, trans_ldpc_length, information_length, QC_Z, snr_list):
+    def __init__(self, modOrder, constellation_real, constellation_image, prob, ldpc_length, trans_ldpc_length, information_length, QC_Z, esn0=None, ebn0=None):
         self.ModOrder = modOrder
         self.bitsPerSym = int(math.log2(self.ModOrder))
         self.Cons_Re = constellation_real
@@ -49,10 +51,8 @@ class ConstellationPerformanceTotal:
             self.prob = np.array(prob)
         self.prob = self.prob.reshape([-1])
         self.ldpc_length = ldpc_length
-        if isinstance(snr_list, Iterable):
-            self.snr_list = list(snr_list)
-        else:
-            self.snr_list = [snr_list]
+        self.esn0 = esn0
+        self.ebn0 = ebn0
 
         # LDPC码设置 (设置5G LDPC码的参数)
         # 是否加LDPC码 (0-No!, 1-Yes!)
@@ -125,6 +125,25 @@ class ConstellationPerformanceTotal:
         R2 = H2/H1
         ebn0 = esn0-10*math.log10(self.bitsPerSym*self.ldpc_code_rate*R2)
         return ebn0
+
+    def _calcu_ebn0_esn0(self):
+        eq_prob = np.ones(self.ModOrder)
+        eq_prob = eq_prob/np.sum(eq_prob)
+        H1 = -np.sum(eq_prob*np.log(eq_prob))
+        H2 = -np.sum(self.prob*np.log(self.prob))
+        R2 = H2/H1
+        if not self.ebn0 is None:
+            self.esn0 = self.ebn0+10 * \
+                math.log10(self.bitsPerSym*self.ldpc_code_rate*R2)
+        else:
+            if self.esn0 is None:
+                raise ValueError("未设置信噪比")
+            self.ebn0 = self.esn0-10 * \
+                math.log10(self.bitsPerSym*self.ldpc_code_rate*R2)
+        print("ebn0:{ebn0:.2f}, esn0:{esn0:.2f}".format(
+            ebn0=self.ebn0, esn0=self.esn0))
+        R_total = self.ldpc_code_rate*R2
+        print("总码率约为:{:.3f}".format(R_total))
 
     def constellation_norm(self):
         """星座归一化"""
@@ -271,82 +290,84 @@ class ConstellationPerformanceTotal:
         """该函数是测试加LDPC码的系统性能"""
         self._record_index()
         self._probability_shaping()
+        self._calcu_ebn0_esn0()
         self.constellation_norm()
         save_count = self.trans_ldpc_length // self.bitsPerSym    # 保存需要传输多少次
         generated_matrix = construct_generate_matrix()             # 获得生成矩阵
-        for snr in self.snr_list:
-            total_frame = 0
-            error_frame = 0
-            error_bit = 0
-            flag = True
-            print("EsN0 = " + str(snr))
-            while flag:
-                total_frame += 1
-                noise_sigma = np.sqrt(0.5 / math.pow(10, snr / 10))
-                msg_bit = self.msg_bit_gen()  # 按概率产生符号，再转换成信息比特
-                # msg_bit = np.random.randint(
-                #     0, 2, (1, self.information_Len))    # 产生信息比特流
-                trans_bit = get_ldpc_code(
-                    msg_bit, generated_matrix)            # 产生LDPC码
-                actual_trans_bit = trans_bit[:, :-2 * glob_Z]
-                actual_trans_bit = self.ldpc_pcs_rearray_encode(
-                    actual_trans_bit)
-                # rearray_trans_bit_decode = self.ldpc_pcs_rearray_decode(rearray_trans_bit)
-                rec_dims = np.zeros((save_count, self.bitsPerSym), dtype=float)
-                for i in range(save_count):
-                    temp_actual_trans_bit = actual_trans_bit[:,
-                                                             self.bitsPerSym * i: self.bitsPerSym * (i + 1)]
-                    temp_rec_bit_llr = self.run_ldpc(
-                        temp_actual_trans_bit, noise_sigma)
-                    rec_dims[i, :] = temp_rec_bit_llr[:]
+        snr = self.esn0
+        total_frame = 0
+        error_frame = 0
+        error_bit = 0
+        flag = True
+        print("EsN0 = " + str(snr))
+        while flag:
+            total_frame += 1
+            noise_sigma = np.sqrt(0.5 / math.pow(10, snr / 10))
+            msg_bit = self.msg_bit_gen()  # 按概率产生符号，再转换成信息比特
+            # msg_bit = np.random.randint(
+            #     0, 2, (1, self.information_Len))    # 产生信息比特流
+            trans_bit = get_ldpc_code(
+                msg_bit, generated_matrix)            # 产生LDPC码
+            actual_trans_bit = trans_bit[:, :-2 * glob_Z]
+            actual_trans_bit = self.ldpc_pcs_rearray_encode(
+                actual_trans_bit)
+            # rearray_trans_bit_decode = self.ldpc_pcs_rearray_decode(rearray_trans_bit)
+            rec_dims = np.zeros((save_count, self.bitsPerSym), dtype=float)
+            for i in range(save_count):
+                temp_actual_trans_bit = actual_trans_bit[:,
+                                                         self.bitsPerSym * i: self.bitsPerSym * (i + 1)]
+                temp_rec_bit_llr = self.run_ldpc(
+                    temp_actual_trans_bit, noise_sigma)
+                rec_dims[i, :] = temp_rec_bit_llr[:]
 
-                # 得到解调器的输出
-                total_rec_bit_llr = np.squeeze(np.reshape(
-                    rec_dims, (-1, self.trans_ldpc_length)))  # 降维, 变成一维
-                total_rec_bit_llr = self.ldpc_pcs_rearray_decode(
-                    total_rec_bit_llr)
-                # 补上打孔的
-                ldpc_in_llr = np.zeros(self.LDPC_Len, dtype=float)
-                ldpc_in_llr[:-2 * glob_Z] = total_rec_bit_llr
+            # 得到解调器的输出
+            total_rec_bit_llr = np.squeeze(np.reshape(
+                rec_dims, (-1, self.trans_ldpc_length)))  # 降维, 变成一维
+            total_rec_bit_llr = self.ldpc_pcs_rearray_decode(
+                total_rec_bit_llr)
+            # 补上打孔的
+            ldpc_in_llr = np.zeros(self.LDPC_Len, dtype=float)
+            ldpc_in_llr[:-2 * glob_Z] = total_rec_bit_llr
 
-                # LDPC译码
-                ldpc_out_llr = decode_algorithm_NMS(ldpc_in_llr)
+            # LDPC译码
+            ldpc_out_llr = decode_algorithm_NMS(ldpc_in_llr)
 
-                # 取信息比特
-                decode_information_bit = np.reshape(
-                    ldpc_out_llr[0:self.information_Len], (1, self.information_Len))
+            # 取信息比特
+            decode_information_bit = np.reshape(
+                ldpc_out_llr[0:self.information_Len], (1, self.information_Len))
 
-                temp_error_num = np.sum(
-                    np.abs(decode_information_bit - msg_bit))
+            temp_error_num = np.sum(
+                np.abs(decode_information_bit - msg_bit))
 
-                if temp_error_num == 0:
-                    error_frame += 0
-                    error_bit += 0
-                else:
-                    error_frame += 1
-                    error_bit += temp_error_num
+            if temp_error_num == 0:
+                error_frame += 0
+                error_bit += 0
+            else:
+                error_frame += 1
+                error_bit += temp_error_num
 
-                if error_frame >= 100 and total_frame >= 1000:
-                    flag = False
+            if error_frame >= 100 and total_frame >= 1000 or total_frame >= 50000:
+                flag = False
 
-                if total_frame % 20 == 0:
-                    temp_fer = error_frame / total_frame
-                    temp_ber = error_bit / (total_frame * self.information_Len)
-                    print("temp_fer = " + str(temp_fer) +
-                          ", temp_ber = " + str(temp_ber))
+            if total_frame % 20 == 0:
+                temp_fer = error_frame / total_frame
+                temp_ber = error_bit / (total_frame * self.information_Len)
+                print("temp_fer = " + str(temp_fer) +
+                      ", temp_ber = " + str(temp_ber))
 
-            fer = error_frame / total_frame
-            ber = error_bit / (total_frame * self.information_Len)
-            ebn0 = self.calcu_ebn0(snr)
-            print("fer = " + str(fer) + ", ber = " + str(ber))
-            print("\n")
-            f1 = open(self.LDPC_filename, 'a')
-            f1.write("\n")
-            # f1.write("EsN0 = " + str(snr) + ", FER = " +
-            #          str(fer) + ", BER = " + str(ber))
-            f1.write("EsN0 = {esn0}, EbN0 = {ebn0}, FER = {fer}, BER = {ber}".format(esn0=snr,ebn0=ebn0,fer=fer,ber=ber))
-            f1.write("\n")
-            f1.close()
+        fer = error_frame / total_frame
+        ber = error_bit / (total_frame * self.information_Len)
+        ebn0 = self.ebn0
+        print("fer = " + str(fer) + ", ber = " + str(ber))
+        print("\n")
+        f1 = open(self.LDPC_filename, 'a')
+        f1.write("\n")
+        # f1.write("EsN0 = " + str(snr) + ", FER = " +
+        #          str(fer) + ", BER = " + str(ber))
+        f1.write("EsN0 = {esn0}, EbN0 = {ebn0}, FER = {fer}, BER = {ber}".format(
+            esn0=snr, ebn0=ebn0, fer=fer, ber=ber))
+        f1.write("\n")
+        f1.close()
 
     def evaluate(self):
         if self.LDPC_flag == 1:
@@ -412,23 +433,6 @@ class ConstellationPerformanceTotal:
 
 if __name__ == '__main__':
     modOrder = 16
-    snr = float(input("snr:"))
-
-    # data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt', header=None, sep='\s+')
-    # constellation_real = np.reshape(np.array(data[[3]]), modOrder)
-    # constellation_image = np.reshape(np.array(data[[5]]), modOrder)
-    # prob = np.ones(shape=modOrder, dtype=np.float32)/modOrder
-
-    matpath = "./images/modOrder16/"
-    
-    order = 16
-    filename = "snr{snr:.2f}_order{M}.mat".format(snr=snr, M=order)
-    cons_l_dict = loadmat(os.path.join(matpath, filename))
-
-    cons = cons_l_dict["cons"]
-    prob = cons_l_dict["prob"].reshape([-1])
-    constellation_real = cons[:, 0].reshape([-1])
-    constellation_image = cons[:, 1].reshape([-1])
 
     LDPC_flag = 1                      # 0 --- 不加LDPC码, 1 --- 加LDPC码
     # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
@@ -441,23 +445,45 @@ if __name__ == '__main__':
     NoLDPC_filename = 'ceshi.txt'
     LDPC_filename = 'ceshi_ldpc_gallager.txt'
 
-    # prob = sio.loadmat("tmp_prob_cons6.8.mat")['prob'].reshape([-1])
-    Conventional_test = ConstellationPerformanceTotal(
-        modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
-        ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
-        QC_Z=glob_Z, snr_list=snr)
+    ebn0_flag = comm.input_bool(input("是否ebn0(y/n):"))
 
-    # plt.scatter(constellation_real, constellation_image)
-    # sn = list(range(modOrder))
-    # for i in range(modOrder):
-    #     marker = ""
-    #     sym = i
-    #     for _ in range(int(math.log2(modOrder))):
-    #         marker = str(sym % 2)+marker
-    #         sym //= 2
-    #     marker = "$"+marker+"$"
+    if ebn0_flag:
+        ebn0 = float(input("输入ebn0:"))
+        data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt',
+                           header=None, sep='\s+')
+        constellation_real = np.reshape(np.array(data[[3]]), modOrder)
+        constellation_image = np.reshape(np.array(data[[5]]), modOrder)
+        prob = np.ones(shape=modOrder, dtype=np.float32)/modOrder
+        Conventional_test = ConstellationPerformanceTotal(
+            modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
+            ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
+            QC_Z=glob_Z, ebn0=ebn0)
+    else:
+        matpath = "./images/modOrder16/"
+        files = os.listdir(matpath)
+        print("可选择的esn0如下:")
+        for f in files:
+            if os.path.splitext(f)[1] == ".mat":
+                print(f)
+        esn0 = float(input("输入esn0:"))
 
-    #     plt.scatter(
-    #         constellation_real[i], constellation_image[i], s=400, marker=marker, c='r')
-    # plt.show()
+        filename = "snr{snr:.2f}_order{M}.mat".format(snr=esn0, M=modOrder)
+        cons_l_dict = loadmat(os.path.join(matpath, filename))
+
+        cons = cons_l_dict["cons"]
+        prob = cons_l_dict["prob"].reshape([-1])
+        constellation_real = cons[:, 0].reshape([-1])
+        constellation_image = cons[:, 1].reshape([-1])
+
+        Conventional_test = ConstellationPerformanceTotal(
+            modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
+            ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
+            QC_Z=glob_Z, esn0=esn0)
+
+    st = datetime.now()
+    log_path = "./log"
+    log_name = "g{}.log".format(st.strftime("%m%d_%H%M%S"))
+    if not os.path.exists(log_path):
+        os.makedirs(log_path)
+    comm.redirect2log(os.path.join(log_path, log_name))
     Conventional_test.evaluate()
