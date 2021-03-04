@@ -458,6 +458,7 @@ if __name__ == '__main__':
             modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
             ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
             QC_Z=glob_Z, ebn0=ebn0)
+        print("等概符号标准QAM的仿真")
     else:
         matpath = "./images/modOrder16/"
         files = os.listdir(matpath)
@@ -479,6 +480,7 @@ if __name__ == '__main__':
             modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
             ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
             QC_Z=glob_Z, esn0=esn0)
+        print("PCS shaping后的星座")
 
     st = datetime.now()
     log_path = "./log"
