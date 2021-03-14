@@ -40,54 +40,40 @@ np.random.seed(137)
 
 
 class ConstellationPerformanceTotal:
-    def __init__(self, modOrder, constellation_real, constellation_image, prob, ldpc_length, trans_ldpc_length, information_length, QC_Z, esn0=None, ebn0=None):
+    def __init__(self, modOrder, constellation_real, constellation_image, prob,outputfile="ceshi_ldpc_gallager.txt", ldpc_para:LdpcParameter=LdpcParameter(0,0,0,0), esn0=None, ebn0=None,LDPC_flag=1):
         self.ModOrder = modOrder
         self.bitsPerSym = int(math.log2(self.ModOrder))
         self.Cons_Re = constellation_real
         self.Cons_Im = constellation_image
-        self.prob = prob
-        self.prob_quadra = self.prob[0:len(self.prob)//4]
+        
         if not isinstance(prob, np.ndarray):
-            self.prob = np.array(prob)
+            prob = np.array(prob)
+        self.prob = prob
         self.prob = self.prob.reshape([-1])
-        self.ldpc_length = ldpc_length
+        self.prob_quadra = self.prob[0:len(self.prob)//4]
+        self.prob = np.concatenate((self.prob,self.prob,self.prob,self.prob))        
         self.esn0 = esn0
         self.ebn0 = ebn0
 
         # LDPC码设置 (设置5G LDPC码的参数)
         # 是否加LDPC码 (0-No!, 1-Yes!)
         self.LDPC_flag = LDPC_flag
-        self.LDPC_Len = glob_ldpc_length                                     # 码长
-        self.trans_ldpc_length = trans_ldpc_length                         # 实际传输比特
-        self.information_Len = information_length                       # 信息比特长度
+        self.LDPC_Len = ldpc_para.ldpc_length                                     # 码长
+        self.trans_ldpc_length = ldpc_para.ldpc_trans_length                         # 实际传输比特
+        self.information_Len = ldpc_para.info_length                       # 信息比特长度
+        self.qc_z = ldpc_para.qc_z
         # self.LDPC_code_rate = self.information_Len / self.trans_ldpc_length     # 码率
         self.ldpc_code_rate = fractions.Fraction(
             self.information_Len, self.trans_ldpc_length)
         self.ldpc_code_rate: fractions.Fraction
         # 保存文件名
-        self.NoLDPC_filename = NoLDPC_filename
-        self.LDPC_filename = LDPC_filename
+        self.NoLDPC_filename = 'ceshi.txt'
+        self.LDPC_filename = outputfile
 
     def _probability_shaping(self):
 
         self.prob = self.prob/np.sum(self.prob)
         self.prob_quadra = self.prob_quadra/np.sum(self.prob_quadra)
-        # self.ps_value = np.ones(self.ModOrder, dtype=float)
-        # self.ps_value = prob
-        # # 融合2个点
-        # fuse_2points = [0, 12, 8, 10, 4, 5, 24, 26, 16, 28, 20, 21, 52, 53, 48, 60, 56, 58, 40, 42, 32, 44, 36, 37]
-        # # # 融合3个点
-        # fuse_3points = [1, 2, 3, 17, 18, 19, 49, 50, 51, 33, 34, 35]
-        # for i in range(self.ModOrder):
-        #     if i in fuse_2points:
-        #         self.ps_value[i] = 0.5
-        #     elif i in fuse_3points:
-        #         self.ps_value[i] = 1 / 3
-
-        # fuse_points = [62, 30, 28, 60, 56, 24, 40, 8, 44, 12, 46, 14, 42, 10, 26, 58]
-        # for i in range(self.ModOrder):
-        #     if i in fuse_points:
-        #         self.ps_value[i] = 0.5
 
     def _record_index(self):
         """记录星座点中每个比特为0和1时对应的符号"""
@@ -180,7 +166,8 @@ class ConstellationPerformanceTotal:
 
     def demodulation(self, rx_spread, noise_sigma):
         """实现解调功能, 这个函数可以得到比特软量, 这个函数是传统log-MAP算法, 可以用于概率Shaping中"""
-        var = math.pow(noise_sigma, 2) * 2         # 噪声方差, notice 噪声加的方差是对应实部或虚部的2倍, 切记不能用**
+        var = math.pow(noise_sigma, 2) * \
+            2         # 噪声方差, notice 噪声加的方差是对应实部或虚部的2倍, 切记不能用**
         # 计算解调器得到的LLR信息
         demod_out_llr = np.zeros((1, self.bitsPerSym), dtype=float)
         for i in range(self.bitsPerSym):
@@ -307,7 +294,7 @@ class ConstellationPerformanceTotal:
             #     0, 2, (1, self.information_Len))    # 产生信息比特流
             trans_bit = get_ldpc_code(
                 msg_bit, generated_matrix)            # 产生LDPC码
-            actual_trans_bit = trans_bit[:, :-2 * glob_Z]
+            actual_trans_bit = trans_bit[:, :-2 * self.qc_z]
             actual_trans_bit = self.ldpc_pcs_rearray_encode(
                 actual_trans_bit)
             # rearray_trans_bit_decode = self.ldpc_pcs_rearray_decode(rearray_trans_bit)
@@ -326,7 +313,7 @@ class ConstellationPerformanceTotal:
                 total_rec_bit_llr)
             # 补上打孔的
             ldpc_in_llr = np.zeros(self.LDPC_Len, dtype=float)
-            ldpc_in_llr[:-2 * glob_Z] = total_rec_bit_llr
+            ldpc_in_llr[:-2 * self.qc_z] = total_rec_bit_llr
 
             # LDPC译码
             ldpc_out_llr = decode_algorithm_NMS(ldpc_in_llr)
@@ -430,21 +417,42 @@ class ConstellationPerformanceTotal:
         return res
 
 
-if __name__ == '__main__':
-    modOrder = 64
+class LdpcParameter:
+    def __init__(self,ldpc_length,ldpc_trans_length,info_length,qc_z):
+        self.ldpc_length=ldpc_length
+        self.ldpc_trans_length=ldpc_trans_length
+        self.info_length=info_length
+        self.qc_z=qc_z       
 
+
+def choose_ldpc_by_order(modOrder)->LdpcParameter:
+    if modOrder==16:
+        return LdpcParameter(1104,1056,528,24)
+    
+    # 64
+    return LdpcParameter(1120,1056,704,32)
+
+
+def simulation_ldpc(modOrder, snr, ebn0_flag):
     LDPC_flag = 1                      # 0 --- 不加LDPC码, 1 --- 加LDPC码
     # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
-    glob_ldpc_length = 1120
-    glob_trans_ldpc_length = 1056      # 实际信道中传输比特的长度, 5G LDPC码需要打孔前两列
-    glob_information_length = 704      # 信息比特长度
-    glob_Z = 32                        # QC矩阵中扩展因子Z, 该参数大小决定了打孔比特的长度
+    ldpc_para = choose_ldpc_by_order(modOrder)
+    
 
-    # 保存文件
-    NoLDPC_filename = 'ceshi.txt'
-    LDPC_filename = 'ceshi_ldpc_gallager.txt'
-
+if __name__ == '__main__':
+    modOrder = int(input("输入调制阶数(16,64,暂不支持256):"))
+    if modOrder not in {16, 64}:
+        raise ValueError("只能选择16或64")
     ebn0_flag = comm.input_bool(input("是否ebn0(y/n):"))
+    matpath = "./images/modOrder%d/" % modOrder
+    files = os.listdir(matpath)
+    files.sort()
+    print("如果使用esn0, 请对照以下文件输入对应的esn0:")
+    for f in files:
+        if os.path.splitext(f)[1] == ".mat":
+            print(f)
+    input_snr = float(input("输入ebn0:")) if ebn0_flag else float(input("输入esn0:"))
+    simulation_ldpc(modOrder=modOrder,snr=input_snr,ebn0_flag=ebn0_flag)
 
     if ebn0_flag:
         ebn0 = float(input("输入ebn0:"))
