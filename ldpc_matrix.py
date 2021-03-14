@@ -47,6 +47,7 @@ class Ldpc:
         """通过H求解生成矩阵G"""
 
         # 对tempH进行高斯消去，形成tempH = [P|I]
+        global exchange_col
         tempH = self.H
         col_record = list(range(self.N))                   # 记录交换列的位置
         exchange_num = 0
@@ -101,6 +102,72 @@ class Ldpc:
         G[0:K, 0:K] = np.eye(K, dtype=int)
         G[:, K:] = Q
         return G
+
+    def decode_algorithm_NMS(self,bitsoft):  # bitsoft是软信息
+        """MinSum算法"""
+        alpha = 0.75  # NMS算法的系数
+        outseq = np.zeros(self.N, dtype=int)
+        max_iteration = 30  # 迭代次数
+
+        # hard decision
+        for i in range(self.N):
+            if bitsoft[i] > 0:
+                outseq[i] = 0
+            else:
+                outseq[i] = 1
+        if self.check_ldpc_code(outseq) == 0:
+            return outseq
+
+        # NMS Algorithm
+        p = np.array(bitsoft, dtype=float)  # 初始化最大似然后验概率
+        r = np.zeros((self.M, self.wr), dtype=float)  # 初始化校验节点传向变量节点的消息
+
+        for k in range(max_iteration):
+            p1 = p
+            p = np.zeros(self.N, dtype=float)
+            for i in range(self.M):
+                sign = 1
+                pos = -1
+                min1 = 1e10  # 最小值
+                min2 = 1e10  # 次最小值
+                sgn_value = []
+
+                for j in range(self.check_degree[i]):
+                    tempd = p1[self.check_index[i, j] - 1] - r[i, j]
+                    if tempd < 0:
+                        sgn_value.append(-1)
+                        sign = 0 - sign
+                        tempd = 0 - tempd
+                    else:
+                        sgn_value.append(1)
+                    if tempd < min1:
+                        min2 = min1
+                        min1 = tempd
+                        pos = j
+                    else:
+                        if tempd < min2:
+                            min2 = tempd
+
+                for j in range(self.check_degree[i]):
+                    if j == pos:
+                        r[i, j] = min2 * alpha
+                    else:
+                        r[i, j] = min1 * alpha
+                    r[i, j] = sign * sgn_value[j] * r[i, j]
+                    p[self.check_index[i, j] - 1] += r[i, j]
+
+            # hard decision
+            for i in range(self.N):
+                p[i] = p[i] + bitsoft[i]
+                if p[i] > 0:
+                    outseq[i] = 0
+                else:
+                    outseq[i] = 1
+
+            if self.check_ldpc_code(outseq) == 0:
+                break
+
+        return outseq
 
 
 def get_ldpc_code(baseband_bit, generated_matrix):

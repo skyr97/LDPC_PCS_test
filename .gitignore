@@ -1,5 +1,7 @@
 .vscode
 __pycache__
-.pyc
-.xml
+# pycharm文件夹
+.idea
+*.pyc
+*.xml
 tempdebug.py
