@@ -1,7 +1,7 @@
 import scipy.io as sio
 import numpy as np
 
-filename = 'LDPC_matrix/format_mat/Tanner_R1-2_Z24_BG1.mat'
+filename = 'LDPC_matrix/format_mat/Tanner_R2-3_Z32_BG1.mat'
 data = sio.loadmat(filename)
 check_matrix = data['data']                        # 存储校验矩阵的信息，根据txt文件
 

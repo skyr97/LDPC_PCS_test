@@ -180,8 +180,7 @@ class ConstellationPerformanceTotal:
 
     def demodulation(self, rx_spread, noise_sigma):
         """实现解调功能, 这个函数可以得到比特软量, 这个函数是传统log-MAP算法, 可以用于概率Shaping中"""
-        var = math.pow(noise_sigma, 2) * \
-            2         # 噪声方差, notice 噪声加的方差是对应实部或虚部的2倍, 切记不能用**
+        var = math.pow(noise_sigma, 2) * 2         # 噪声方差, notice 噪声加的方差是对应实部或虚部的2倍, 切记不能用**
         # 计算解调器得到的LLR信息
         demod_out_llr = np.zeros((1, self.bitsPerSym), dtype=float)
         for i in range(self.bitsPerSym):
@@ -385,11 +384,11 @@ class ConstellationPerformanceTotal:
             4, 6), 256: fractions.Fraction(6, 8)}
         if self.ldpc_code_rate != rate_dic[self.ModOrder]:
             raise ValueError(
-                "the LDPC code rate must be {numerator}/{denom} if the modulation order is {modOrder},\
-                     but {numerator2}/{denom2} is given".format(numerator=rate_dic[self.ModOrder].numerator,
-                                                                denom=rate_dic[self.ModOrder].denominator,
-                                                                modOrder=self.ModOrder, numerator2=self.ldpc_code_rate.numerator,
-                                                                denom2=self.ldpc_code_rate.denominator))
+                "the LDPC code rate must be {numerator}/{denom} if the modulation order is {modOrder},but {numerator2}/{denom2} is given".format(numerator=rate_dic[self.ModOrder].numerator,
+                                                                                                                                                 denom=rate_dic[
+                                                                                                                                                     self.ModOrder].denominator,
+                                                                                                                                                 modOrder=self.ModOrder, numerator2=self.ldpc_code_rate.numerator,
+                                                                                                                                                 denom2=self.ldpc_code_rate.denominator))
         shape = code_bits.shape
         code_bits = code_bits.reshape([-1])
         code_len = len(code_bits)
@@ -432,14 +431,14 @@ class ConstellationPerformanceTotal:
 
 
 if __name__ == '__main__':
-    modOrder = 16
+    modOrder = 64
 
     LDPC_flag = 1                      # 0 --- 不加LDPC码, 1 --- 加LDPC码
     # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
-    glob_ldpc_length = 1104
+    glob_ldpc_length = 1120
     glob_trans_ldpc_length = 1056      # 实际信道中传输比特的长度, 5G LDPC码需要打孔前两列
-    glob_information_length = 528      # 信息比特长度
-    glob_Z = 24                        # QC矩阵中扩展因子Z, 该参数大小决定了打孔比特的长度
+    glob_information_length = 704      # 信息比特长度
+    glob_Z = 32                        # QC矩阵中扩展因子Z, 该参数大小决定了打孔比特的长度
 
     # 保存文件
     NoLDPC_filename = 'ceshi.txt'
@@ -449,18 +448,18 @@ if __name__ == '__main__':
 
     if ebn0_flag:
         ebn0 = float(input("输入ebn0:"))
-        data = pd.read_csv('QAM_Gray_Mapping/NR_16QAM.txt',
+        data = pd.read_csv('QAM_Gray_Mapping/NR_%dQAM.txt' % (modOrder),
                            header=None, sep='\s+')
         constellation_real = np.reshape(np.array(data[[3]]), modOrder)
         constellation_image = np.reshape(np.array(data[[5]]), modOrder)
         prob = np.ones(shape=modOrder, dtype=np.float32)/modOrder
         Conventional_test = ConstellationPerformanceTotal(
-            modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
+            modOrder=modOrder, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
             ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
             QC_Z=glob_Z, ebn0=ebn0)
         print("等概符号标准QAM的仿真")
     else:
-        matpath = "./images/modOrder16/"
+        matpath = "./images/modOrder%d/" % modOrder
         files = os.listdir(matpath)
         print("可选择的esn0如下:")
         for f in files:
@@ -477,7 +476,7 @@ if __name__ == '__main__':
         constellation_image = cons[:, 1].reshape([-1])
 
         Conventional_test = ConstellationPerformanceTotal(
-            modOrder=16, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
+            modOrder=modOrder, constellation_real=constellation_real, constellation_image=constellation_image, prob=prob,
             ldpc_length=glob_ldpc_length, trans_ldpc_length=glob_trans_ldpc_length, information_length=glob_information_length,
             QC_Z=glob_Z, esn0=esn0)
         print("PCS shaping后的星座")
