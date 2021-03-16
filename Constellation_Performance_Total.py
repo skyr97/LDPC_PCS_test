@@ -1,5 +1,5 @@
 # -*- coding:utf-8 -*-
-from __future__ import annotations
+# from __future__ import annotations
 import numpy as np
 import math
 import matplotlib.pyplot as plt
@@ -167,7 +167,7 @@ class ConstellationPerformanceTotal:
 
     def demodulation(self, rx_spread, noise_sigma):
         """实现解调功能, 这个函数可以得到比特软量, 这个函数是传统log-MAP算法, 可以用于概率Shaping中"""
-        var = math.pow(noise_sigma, 2) * 2  # 噪声方差, notice 噪声加的方差是对应实部或虚部的2倍, 切记不能用**
+        var = math.pow(noise_sigma, 2) * 2
         # 计算解调器得到的LLR信息
         demod_out_llr = np.zeros((1, self.bitsPerSym), dtype=float)
         for i in range(self.bitsPerSym):
@@ -335,19 +335,20 @@ class ConstellationPerformanceTotal:
                 error_frame += 1
                 error_bit += temp_error_num
 
-            if error_frame >= 100 and total_frame >= 1000 or total_frame >= 50000:
+            if error_frame >= 100 and total_frame >= 1000 or total_frame >= 200000:
                 flag = False
 
             if total_frame % 20 == 0:
                 temp_fer = error_frame / total_frame
                 temp_ber = error_bit / (total_frame * self.information_Len)
                 print("temp_fer = " + str(temp_fer) +
-                      ", temp_ber = " + str(temp_ber))
+                      ", temp_ber = " + str(temp_ber)+",total_frame="+str(total_frame))
 
         fer = error_frame / total_frame
         ber = error_bit / (total_frame * self.information_Len)
         ebn0 = self.ebn0
-        print("fer = " + str(fer) + ", ber = " + str(ber))
+        print("EsN0 = {esn0}, EbN0 = {ebn0}, FER = {fer}, BER = {ber}".format(
+            esn0=snr, ebn0=ebn0, fer=fer, ber=ber))
         print("\n")
         f1 = open(self.LDPC_filename, 'a')
         f1.write("\n")
@@ -452,10 +453,10 @@ def simulation_ldpc(modOrder, snr, ebn0_flag):
         prob = cons_l_dict["prob"].reshape([-1])
         cons_real = cons[:, 0].reshape([-1])
         cons_image = cons[:, 1].reshape([-1])
-
+    outfile = "plain_modOrder{M}.txt".format(M=modOrder) if ebn0_flag else "pcs_modOrder{M}.txt".format(M=modOrder)
     conventional_test = ConstellationPerformanceTotal(modOrder=modOrder, cons_real=cons_real, cons_image=cons_image,
                                                       prob=prob, snr=snr, ebn0_flag=ebn0_flag, tanner_file=tanner_file,
-                                                      ldpc_para=ldpc_para)
+                                                      ldpc_para=ldpc_para, outfile=outfile)
     conventional_test.evaluate()
 
 
