@@ -430,7 +430,7 @@ def choose_ldpc_by_order(modOrder) -> LdpcParameter:
     return LdpcParameter(1120, 1056, 704, 32)
 
 
-def simulation_ldpc(modOrder, snr, ebn0_flag):
+def simulation_ldpc(modOrder, snr, ebn0_flag,geometric_flag):
     LDPC_flag = 1  # 0 --- 不加LDPC码, 1 --- 加LDPC码
     # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
     ldpc_para = choose_ldpc_by_order(modOrder)
@@ -440,20 +440,32 @@ def simulation_ldpc(modOrder, snr, ebn0_flag):
         # 64
         tanner_file = 'LDPC_matrix/format_mat/Tanner_R2-3_Z32_BG1.mat'
     if ebn0_flag:
-        data = pd.read_csv('QAM_Gray_Mapping/NR_%dQAM.txt' % modOrder,
-                           header=None, sep='\s+')
-        cons_real = np.reshape(np.array(data[[3]]), modOrder)
-        cons_image = np.reshape(np.array(data[[5]]), modOrder)
+        if geometric_flag:
+            filename = "./geometric_shape/M{M}/learning_M{M}_EbN0_{ebn0:.0f}dB.mat".format(M=modOrder,ebn0=snr)
+            cons_l_dict = loadmat(file_name=filename)
+            cons = cons_l_dict["deep_M{M}".format(M=modOrder)]
+            cons_real = cons[:, 0].reshape([-1])
+            cons_image = cons[:, 1].reshape([-1])
+            outfile="geometric_modOrder{M}.txt".format(M=modOrder)
+            print("开始仿真几何整形的性能")
+        else:
+            data = pd.read_csv('QAM_Gray_Mapping/NR_%dQAM.txt' % modOrder,
+                            header=None, sep='\s+')
+            cons_real = np.reshape(np.array(data[[3]]), modOrder)
+            cons_image = np.reshape(np.array(data[[5]]), modOrder)
+            outfile = "plain_modOrder{M}.txt".format(M=modOrder)
+            print("开始仿真普通QAM的性能")
         prob = np.ones(shape=modOrder, dtype=np.float32) / modOrder
     else:
-        filename = "snr{snr:.2f}_order{M}.mat".format(snr=snr, M=modOrder)
-        cons_l_dict = loadmat(os.path.join(matpath, filename))
-
+        filename = "./images/modOrder{M}/snr{snr:.2f}_order{M}.mat".format(snr=snr, M=modOrder)
+        cons_l_dict = loadmat(file_name=filename)
         cons = cons_l_dict["cons"]
         prob = cons_l_dict["prob"].reshape([-1])
         cons_real = cons[:, 0].reshape([-1])
         cons_image = cons[:, 1].reshape([-1])
-    outfile = "plain_modOrder{M}.txt".format(M=modOrder) if ebn0_flag else "pcs_modOrder{M}.txt".format(M=modOrder)
+        outfile = outfile = "pcs_modOrder{M}.txt".format(M=modOrder)
+        print("开始仿真PCS的性能")
+
     conventional_test = ConstellationPerformanceTotal(modOrder=modOrder, cons_real=cons_real, cons_image=cons_image,
                                                       prob=prob, snr=snr, ebn0_flag=ebn0_flag, tanner_file=tanner_file,
                                                       ldpc_para=ldpc_para, outfile=outfile)
@@ -465,13 +477,26 @@ if __name__ == '__main__':
     if modOrder not in {16, 64}:
         raise ValueError("只能选择16或64")
     ebn0_flag = comm.input_bool(input("是否ebn0(y/n):"))
-    matpath = "./images/modOrder%d/" % modOrder
-    files = os.listdir(matpath)
-    files.sort()
-    print("如果使用esn0, 请对照以下文件输入对应的esn0:")
-    for f in files:
-        if os.path.splitext(f)[1] == ".mat":
-            print(f)
+    geometric_flag = False
+    if not ebn0_flag:
+        matpath = "./images/modOrder%d/" % modOrder
+        files = os.listdir(matpath)
+        files.sort()
+        print("如果使用esn0, 请对照以下文件输入对应的esn0:")
+        for f in files:
+            if os.path.splitext(f)[1] == ".mat":
+                print(f)
+    else:
+        geometric_flag = comm.input_bool(input("是否使用几何shaping的星座(y/n):"))
+        if geometric_flag:
+            matpath = "./geometric_shape/M%s/"%modOrder
+            files = os.listdir(matpath)
+            files.sort()
+            print("如果仿真几何shaping的性能, 对照以下文件输入对应的esn0:")
+            for f in files:
+                if os.path.splitext(f)[1] == ".mat":
+                    print(f)
+
     input_snr = float(input("输入ebn0:")) if ebn0_flag else float(input("输入esn0:"))
 
     st = datetime.now()
@@ -480,6 +505,7 @@ if __name__ == '__main__':
     if not os.path.exists(log_path):
         os.makedirs(log_path)
     comm.redirect2log(os.path.join(log_path, log_name))
-    simulation_ldpc(modOrder=modOrder, snr=input_snr, ebn0_flag=ebn0_flag)
+    simulation_ldpc(modOrder=modOrder, snr=input_snr, ebn0_flag=ebn0_flag,geometric_flag=geometric_flag)
+    
     et = datetime.now()
     print("run time:", et - st)

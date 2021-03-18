@@ -1,0 +1,60 @@
+开始仿真普通QAM的性能
+ebn0:1.00, esn0:4.01
+总码率约为:0.500
+Suppose Average Power is: 1
+Actual Power is: 1.0000000000000002
+EsN0 = 4.010299968573509
+temp_fer = 1.0, temp_ber = 0.20160984848484848,total_frame=20
+temp_fer = 1.0, temp_ber = 0.19711174242424243,total_frame=40
+temp_fer = 1.0, temp_ber = 0.19750631313131314,total_frame=60
+temp_fer = 1.0, temp_ber = 0.19578598484848486,total_frame=80
+temp_fer = 1.0, temp_ber = 0.19522727272727272,total_frame=100
+temp_fer = 1.0, temp_ber = 0.1952651515151515,total_frame=120
+temp_fer = 1.0, temp_ber = 0.1943046536796537,total_frame=140
+temp_fer = 1.0, temp_ber = 0.19449573863636363,total_frame=160
+temp_fer = 1.0, temp_ber = 0.1935290404040404,total_frame=180
+temp_fer = 1.0, temp_ber = 0.19322916666666667,total_frame=200
+temp_fer = 1.0, temp_ber = 0.19262224517906337,total_frame=220
+temp_fer = 1.0, temp_ber = 0.19260574494949495,total_frame=240
+temp_fer = 1.0, temp_ber = 0.19278117715617715,total_frame=260
+temp_fer = 1.0, temp_ber = 0.1934388528138528,total_frame=280
+temp_fer = 1.0, temp_ber = 0.1930050505050505,total_frame=300
+temp_fer = 1.0, temp_ber = 0.19335345643939394,total_frame=320
+temp_fer = 1.0, temp_ber = 0.193048128342246,total_frame=340
+temp_fer = 1.0, temp_ber = 0.19354482323232322,total_frame=360
+temp_fer = 1.0, temp_ber = 0.1934061004784689,total_frame=380
+temp_fer = 1.0, temp_ber = 0.19319128787878787,total_frame=400
+temp_fer = 1.0, temp_ber = 0.1933712121212121,total_frame=420
+temp_fer = 1.0, temp_ber = 0.1931129476584022,total_frame=440
+temp_fer = 1.0, temp_ber = 0.19312829380764163,total_frame=460
+temp_fer = 1.0, temp_ber = 0.19325284090909092,total_frame=480
+temp_fer = 1.0, temp_ber = 0.19320454545454546,total_frame=500
+temp_fer = 1.0, temp_ber = 0.19299606643356643,total_frame=520
+temp_fer = 1.0, temp_ber = 0.1929783950617284,total_frame=540
+temp_fer = 1.0, temp_ber = 0.19263392857142858,total_frame=560
+temp_fer = 1.0, temp_ber = 0.1928258881922675,total_frame=580
+temp_fer = 1.0, temp_ber = 0.19272727272727272,total_frame=600
+temp_fer = 1.0, temp_ber = 0.19289772727272728,total_frame=620
+temp_fer = 1.0, temp_ber = 0.19258404356060607,total_frame=640
+temp_fer = 1.0, temp_ber = 0.19253615702479338,total_frame=660
+temp_fer = 1.0, temp_ber = 0.19243816844919787,total_frame=680
+temp_fer = 1.0, temp_ber = 0.19234036796536796,total_frame=700
+temp_fer = 1.0, temp_ber = 0.1922506313131313,total_frame=720
+temp_fer = 1.0, temp_ber = 0.19218622031122032,total_frame=740
+temp_fer = 1.0, temp_ber = 0.19223983253588517,total_frame=760
+temp_fer = 1.0, temp_ber = 0.19229555167055168,total_frame=780
+temp_fer = 1.0, temp_ber = 0.19237452651515152,total_frame=800
+temp_fer = 1.0, temp_ber = 0.19237342941611235,total_frame=820
+temp_fer = 1.0, temp_ber = 0.19259334415584414,total_frame=840
+temp_fer = 1.0, temp_ber = 0.19259601832276252,total_frame=860
+temp_fer = 1.0, temp_ber = 0.19272770316804408,total_frame=880
+temp_fer = 1.0, temp_ber = 0.1927756734006734,total_frame=900
+temp_fer = 1.0, temp_ber = 0.19272068511198945,total_frame=920
+temp_fer = 1.0, temp_ber = 0.1926257253384913,total_frame=940
+temp_fer = 1.0, temp_ber = 0.19259390782828284,total_frame=960
+temp_fer = 1.0, temp_ber = 0.1926271645021645,total_frame=980
+temp_fer = 1.0, temp_ber = 0.19249810606060605,total_frame=1000
+EsN0 = 4.010299968573509, EbN0 = 1.0, FER = 1.0, BER = 0.19249810606060605
+
+
+run time: 0:13:50.056343
