@@ -1,0 +1,8 @@
+开始仿真普通QAM的性能
+ebn0:4.00, esn0:7.01
+总码率约为:0.500
+Suppose Average Power is: 1
+Actual Power is: 1.0000000000000002
+EsN0 = 7.010299968573509
+temp_fer = 0.15, temp_ber = 0.011079545454545455,total_frame=20
+temp_fer = 0.125, temp_ber = 0.009564393939393939,total_frame=40
