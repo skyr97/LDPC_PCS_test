@@ -127,7 +127,7 @@ class ConstellationPerformanceTotal:
         H1 = -np.sum(eq_prob * np.log(eq_prob))
         H2 = -np.sum(self.prob * np.log(self.prob))
         R2 = H2 / H1
-        if ebn0_flag:
+        if self.ebn0_flag:
             self.ebn0 = self.snr
             self.esn0 = self.ebn0 + 10 * math.log10(self.bitsPerSym * self.ldpc_code_rate * R2)
         else:
@@ -432,7 +432,7 @@ def choose_ldpc_by_order(modOrder) -> LdpcParameter:
 
 def simulation_ldpc(modOrder, snr, ebn0_flag,geometric_flag):
     LDPC_flag = 1  # 0 --- 不加LDPC码, 1 --- 加LDPC码
-    # 5G LDPC码长, 该程序只接受传输码长是log2(ModOrder)的倍数, 否则就需要补0, 我不想写
+    
     ldpc_para = choose_ldpc_by_order(modOrder)
     if modOrder == 16:
         tanner_file = 'LDPC_matrix/format_mat/Tanner_R1-2_Z24_BG1.mat'
